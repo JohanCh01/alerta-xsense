@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alerta Xsense</title>
+<meta name="description" content="Monitoreo de temperaturas de cámaras — Packing Espárrago">
+<meta name="theme-color" content="#0f1720" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Alerta Xsense">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f5f1;
+    --surface: #fcfcfb;
+    --surface-2: #efeee9;
+    --line: #e2e1db;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #807f79;
+    --ok: #0f8a5f;
+    --ok-soft: #e1f3eb;
+    --bad: #d93a39;
+    --bad-soft: #fde8e7;
+    --warn: #b77700;
+    --warn-soft: #fbf0d9;
+    --idle: #6d6c66;
+    --idle-soft: #ecebe6;
+    --band: rgba(27, 175, 122, .14);
+    --band-line: #1baf7a;
+    --avg: #2a78d6;
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #6250d6;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0f1720;
+      --surface: #17212c;
+      --surface-2: #1f2a36;
+      --line: #2a3644;
+      --ink: #f0efec;
+      --ink-2: #c3c2b7;
+      --ink-3: #8e98a3;
+      --ok: #35c38c;
+      --ok-soft: rgba(53,195,140,.14);
+      --bad: #ff6b6a;
+      --bad-soft: rgba(255,107,106,.15);
+      --warn: #f0b23a;
+      --warn-soft: rgba(240,178,58,.15);
+      --idle: #9aa3ad;
+      --idle-soft: rgba(154,163,173,.14);
+      --band: rgba(53,195,140,.13);
+      --band-line: #35c38c;
+      --avg: #3987e5;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #9085e9;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1720; --surface: #17212c; --surface-2: #1f2a36; --line: #2a3644;
+    --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #8e98a3;
+    --ok: #35c38c; --ok-soft: rgba(53,195,140,.14);
+    --bad: #ff6b6a; --bad-soft: rgba(255,107,106,.15);
+    --warn: #f0b23a; --warn-soft: rgba(240,178,58,.15);
+    --idle: #9aa3ad; --idle-soft: rgba(154,163,173,.14);
+    --band: rgba(53,195,140,.13); --band-line: #35c38c;
+    --avg: #3987e5; --s1: #3987e5; --s2: #d95926; --s3: #9085e9; --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  button { font: inherit; color: inherit; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 40px; }
+
+  /* Encabezado */
+  header.top {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg);
+    padding: 14px 0 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .top-row { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 36px; height: 36px; border-radius: 10px; flex: none;
+    background: var(--ink); display: grid; place-items: center;
+  }
+  .logo svg { width: 20px; height: 20px; }
+  .titles { flex: 1; min-width: 0; }
+  .titles h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
+  .titles p { margin: 0; color: var(--ink-2); font-size: 13px; }
+  .icon-btn {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
+    width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer; flex: none;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn.girando svg { animation: girar 1s linear infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  .aviso {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    background: var(--warn-soft); color: var(--ink); font-size: 13px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .aviso svg { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--warn); }
+
+  /* Resumen + filtros */
+  .resumen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 12px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 12px; box-shadow: var(--shadow); text-align: left; cursor: pointer;
+  }
+  .stat .num { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 12px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+  .stat .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .stat[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: -1px; }
+
+  /* Tarjetas */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 14px 10px; box-shadow: var(--shadow); cursor: pointer; text-align: left;
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; position: relative; overflow: hidden;
+    width: 100%;
+  }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: transparent; }
+  .card.st-ALTO::before, .card.st-BAJO::before { background: var(--bad); }
+  .card.st-SIN_LECTURAS::before { background: var(--warn); }
+  .card:focus-visible { outline: 2px solid var(--avg); outline-offset: 2px; }
+  .card .nombre { font-size: 14px; font-weight: 600; grid-column: 1 / -1; display: flex; gap: 8px; align-items: baseline; }
+  .card .num-cam { color: var(--ink-3); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .card .temp { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 4px; }
+  .card .temp small { font-size: 15px; font-weight: 600; color: var(--ink-2); margin-left: 2px; }
+  .card .rango { font-size: 12.5px; color: var(--ink-2); }
+  .card .der { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; }
+  .card .hora { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .card .spark { grid-column: 1 / -1; height: 42px; margin-top: 6px; }
+  .card .spark svg { width: 100%; height: 100%; display: block; }
+  .card .nota { grid-column: 1 / -1; font-size: 12.5px; color: var(--bad); font-weight: 600; margin-top: 2px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px;
+    border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  }
+  .pill svg { width: 13px; height: 13px; }
+  .pill.ALTO, .pill.BAJO { background: var(--bad-soft); color: var(--bad); }
+  .pill.OK { background: var(--ok-soft); color: var(--ok); }
+  .pill.SIN_RANGO, .pill.SIN_DATO { background: var(--idle-soft); color: var(--idle); }
+  .pill.SIN_LECTURAS { background: var(--warn-soft); color: var(--warn); }
+
+  .vacio { text-align: center; padding: 48px 16px; color: var(--ink-2); }
+  .vacio h2 { color: var(--ink); font-size: 17px; margin: 0 0 6px; }
+
+  /* Detalle */
+  .detalle {
+    position: fixed; inset: 0; z-index: 20; background: var(--bg);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .detalle[hidden] { display: none; }
+  .det-top { position: sticky; top: 0; background: var(--bg); z-index: 2; border-bottom: 1px solid var(--line); }
+  .det-top .wrap { display: flex; align-items: center; gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+  .det-top h2 { font-size: 16px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .det-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 18px; margin: 18px 0 14px; }
+  .det-head .big { font-size: 44px; font-weight: 700; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .det-head .big small { font-size: 20px; color: var(--ink-2); font-weight: 600; }
+  .det-head .datos { color: var(--ink-2); font-size: 13.5px; display: grid; gap: 2px; }
+  .det-head .datos b { color: var(--ink); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .panel h3 { margin: 0 0 10px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
+  .segment { display: inline-flex; background: var(--surface-2); border-radius: 9px; padding: 2px; }
+  .segment button { white-space: nowrap; border: 0; background: transparent; padding: 4px 10px; border-radius: 7px; font-size: 12.5px; cursor: pointer; color: var(--ink-2); font-weight: 600; }
+  .segment button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
+  .chart { position: relative; touch-action: pan-y; }
+  .chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart .tick { font-size: 11px; fill: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .tooltip {
+    position: absolute; top: 0; pointer-events: none; background: var(--ink); color: var(--bg);
+    border-radius: 8px; padding: 6px 9px; font-size: 12px; line-height: 1.35; white-space: nowrap;
+    transform: translateX(-50%); opacity: 0; transition: opacity .1s;
+  }
+  .tooltip.on { opacity: 1; }
+  .tooltip .tt-row { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .tooltip .sw { width: 8px; height: 8px; border-radius: 2px; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .leyenda i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+  .leyenda i.banda { height: 10px; background: var(--band); border: 1px dashed var(--band-line); }
+
+  table.sens { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.sens th { text-align: left; font-weight: 600; color: var(--ink-3); font-size: 12px; padding: 0 6px 6px 0; }
+  table.sens td { padding: 8px 6px 8px 0; border-top: 1px solid var(--line); vertical-align: middle; }
+  table.sens td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.sens .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  .pie { color: var(--ink-3); font-size: 12px; text-align: center; margin-top: 24px; }
+  .pie a { color: inherit; }
+
+  @media (max-width: 520px) {
+    .grid { grid-template-columns: 1fr; }
+    .stat .num { font-size: 22px; }
+    .det-head .big { font-size: 38px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .icon-btn.girando svg { animation: none; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap" style="padding-bottom:0">
+    <div class="top-row">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2" stroke-linecap="round"><path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0Z"/><path d="M12 9v7"/></svg>
+      </div>
+      <div class="titles">
+        <h1>Temperaturas de cámaras</h1>
+        <p id="subtitulo">Packing Espárrago · Xsense</p>
+      </div>
+      <button class="icon-btn" id="btn-actualizar" title="Actualizar" aria-label="Actualizar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
+      </button>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div id="aviso"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="resumen" id="resumen"></div>
+  <div class="grid" id="grid"></div>
+  <p class="pie">Datos de Xsense · se revisan automáticamente cada <span id="intervalo">12</span> min</p>
+</main>
+
+<section class="detalle" id="detalle" hidden aria-modal="true" role="dialog" aria-labelledby="det-titulo">
+  <div class="det-top">
+    <div class="wrap">
+      <button class="icon-btn" id="btn-volver" aria-label="Volver">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2 id="det-titulo"></h2>
+    </div>
+  </div>
+  <div class="wrap" id="det-cuerpo"></div>
+</section>
+
+<script>
+(() => {
+  "use strict";
+
+  const URL_DATOS = "data/estado.json";
+  const MIN_DESACTUALIZADO = 30;      // sin datos nuevos en este tiempo -> aviso
+  const REFRESCO_MS = 60 * 1000;      // la app vuelve a mirar los datos cada minuto
+
+  const ICONOS = {
+    ALTO: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l7 10H5z"/></svg>',
+    BAJO: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 19L5 9h14z"/></svg>',
+    OK: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    SIN_RANGO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+    SIN_DATO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+    SIN_LECTURAS: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+  };
+  const ICONO_AVISO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/></svg>';
+  const COLORES_SENSOR = ["--s1", "--s2", "--s3"];
+
+  let estado = null;
+  let filtro = "todas";
+  let horasDetalle = 24;
+  let idDetalle = null;
+
+  const $ = (s) => document.querySelector(s);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmt = (v, d = 1) => (v == null || isNaN(v) ? "–" : Number(v).toFixed(d).replace(/\.0$/, d ? ".0" : ""));
+  const fmtT = (v) => (v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1));
+  const fmtR = (v) => (v == null ? "–" : String(+v));
+  const hora = (ms) => new Date(ms).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" });
+  const fechaHora = (ms) => new Date(ms).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" });
+  const esDesvio = (c) => c.estado === "ALTO" || c.estado === "BAJO";
+  const numCamara = (n) => (n.match(/^(\d+)\.\s*/) || [])[1] || "";
+  const sinNum = (n) => n.replace(/^\d+\.\s*/, "");
+
+  function etiquetaEstado(c) {
+    switch (c.estado) {
+      case "ALTO": return `Alto +${fmtT(c.promedio - c.max)} °C`;
+      case "BAJO": return `Bajo −${fmtT(c.min - c.promedio)} °C`;
+      case "OK": return "En rango";
+      case "SIN_RANGO": return "Sin rango";
+      case "SIN_LECTURAS": return "Sin lecturas";
+      default: return "Sin dato";
+    }
+  }
+  const pill = (c) => `<span class="pill ${c.estado}">${ICONOS[c.estado] || ""}${esc(etiquetaEstado(c))}</span>`;
+
+  function severidad(c) {
+    if (c.estado === "ALTO") return 1000 + (c.promedio - c.max);
+    if (c.estado === "BAJO") return 1000 + (c.min - c.promedio);
+    if (c.estado === "SIN_LECTURAS") return 500;
+    if (c.sensores_fuera > 0) return 100;
+    return 0;
+  }
+
+  // ---------------------------------------------------------------- datos
+  async function cargar(manual = false) {
+    const btn = $("#btn-actualizar");
+    btn.classList.add("girando");
+    try {
+      const r = await fetch(`${URL_DATOS}?t=${Date.now()}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status === 404 ? "sin-datos" : `HTTP ${r.status}`);
+      const nuevo = await r.json();
+      const cambio = !estado || nuevo.generado_ms !== estado.generado_ms;
+      estado = nuevo;
+      if (cambio || manual) render();
+    } catch (e) {
+      if (!estado) renderVacio(e.message === "sin-datos");
+      else renderMeta(true);
+    } finally {
+      setTimeout(() => btn.classList.remove("girando"), 300);
+    }
+  }
+
+  // ---------------------------------------------------------------- vista principal
+  function renderVacio(sinDatos) {
+    $("#meta").innerHTML = "";
+    $("#resumen").innerHTML = "";
+    $("#grid").innerHTML = `<div class="vacio" style="grid-column:1/-1">
+      <h2>${sinDatos ? "Todavía no hay datos" : "No se pudieron cargar los datos"}</h2>
+      <p>${sinDatos ? "Aparecerán aquí después de la primera revisión automática del monitor." : "Revisa tu conexión a internet e inténtalo de nuevo."}</p></div>`;
+  }
+
+  function renderMeta(falloRed = false) {
+    const ahora = Date.now();
+    const min = Math.round((ahora - estado.generado_ms) / 60000);
+    const proxima = estado.generado_ms + estado.intervalo_minutos * 60000;
+    $("#subtitulo").textContent = `${estado.nodo} · Xsense`;
+    $("#intervalo").textContent = estado.intervalo_minutos;
+    $("#meta").innerHTML =
+      `<span>Última revisión <b>${hora(estado.generado_ms)}</b> (hace ${min < 1 ? "menos de 1" : min} min)</span>` +
+      (min <= MIN_DESACTUALIZADO ? `<span>Próxima ~${hora(proxima)}</span>` : "");
+    let aviso = "";
+    if (estado._muestra) {
+      aviso = "Datos de muestra para revisar el diseño: aún no son lecturas en vivo.";
+    } else if (min > MIN_DESACTUALIZADO) {
+      aviso = `No hay datos nuevos desde las ${hora(estado.generado_ms)}. El monitor automático podría estar detenido; revisa Xsense directamente.`;
+    } else if (falloRed) {
+      aviso = "Sin conexión: mostrando los últimos datos descargados.";
+    }
+    $("#aviso").innerHTML = aviso ? `<div class="aviso">${ICONO_AVISO}<span>${esc(aviso)}</span></div>` : "";
+  }
+
+  function render() {
+    renderMeta();
+    const cams = estado.camaras;
+    const nFuera = cams.filter(esDesvio).length;
+    const nOk = cams.filter((c) => c.estado === "OK").length;
+    const nOtros = cams.length - nFuera - nOk;
+    $("#resumen").innerHTML = [
+      ["fuera", nFuera, "Fuera de rango", "var(--bad)"],
+      ["ok", nOk, "En rango", "var(--ok)"],
+      ["todas", cams.length, nOtros ? `Total (${nOtros} sin rango)` : "Total cámaras", "var(--ink-3)"],
+    ].map(([f, n, lbl, color]) =>
+      `<button class="stat" data-filtro="${f}" aria-pressed="${filtro === f}">
+        <div class="num">${n}</div><div class="lbl"><span class="dot" style="background:${color}"></span>${lbl}</div></button>`
+    ).join("");
+    document.querySelectorAll(".stat").forEach((b) => b.addEventListener("click", () => {
+      filtro = filtro === b.dataset.filtro && b.dataset.filtro !== "todas" ? "todas" : b.dataset.filtro;
+      render();
+    }));
+
+    let lista = [...cams];
+    if (filtro === "fuera") lista = lista.filter(esDesvio);
+    if (filtro === "ok") lista = lista.filter((c) => c.estado === "OK");
+    lista.sort((a, b) => severidad(b) - severidad(a) || a.nombre.localeCompare(b.nombre));
+
+    $("#grid").innerHTML = lista.length ? lista.map(tarjeta).join("") :
+      `<div class="vacio" style="grid-column:1/-1"><h2>Nada por aquí</h2><p>No hay cámaras en esta categoría.</p></div>`;
+    document.querySelectorAll(".card").forEach((el) => el.addEventListener("click", () => abrir(el.dataset.id)));
+
+    if (idDetalle) renderDetalle();
+  }
+
+  function tarjeta(c) {
+    const rango = c.min != null ? `Rango ${fmtR(c.min)} – ${fmtR(c.max)} °C` : "Sin rango configurado";
+    const nota = c.sensores.length > 1 && c.sensores_fuera > 0
+      ? `<div class="nota">${c.sensores_fuera} de ${c.sensores.length} sensores fuera de rango</div>` : "";
+    return `<button class="card st-${c.estado}" data-id="${esc(c.id)}" aria-label="${esc(c.nombre)}: ${fmtT(c.promedio)} grados, ${esc(etiquetaEstado(c))}">
+      <div class="nombre"><span class="num-cam">${esc(numCamara(c.nombre))}</span><span>${esc(sinNum(c.nombre))}</span></div>
+      <div>
+        <div class="temp">${fmtT(c.promedio)}<small>°C</small></div>
+        <div class="rango">${esc(rango)}</div>
+      </div>
+      <div class="der">${pill(c)}<span class="hora">${c.ultima_lectura_ms ? "Lectura " + hora(c.ultima_lectura_ms) : ""}</span></div>
+      ${nota}
+      <div class="spark">${sparkline(c)}</div>
+    </button>`;
+  }
+
+  function sparkline(c) {
+    const s = c.serie || [];
+    if (s.length < 2) return "";
+    const W = 300, H = 42, P = 3;
+    const xs = s.map((p) => p[0]), ys = s.map((p) => p[1]);
+    let lo = Math.min(...ys), hi = Math.max(...ys);
+    if (c.min != null) { lo = Math.min(lo, c.min); hi = Math.max(hi, c.max); }
+    if (hi - lo < 1) { hi += 0.5; lo -= 0.5; }
+    const x0 = xs[0], x1 = xs[xs.length - 1];
+    const X = (v) => ((v - x0) / (x1 - x0 || 1)) * (W - P * 2) + P;
+    const Y = (v) => H - P - ((v - lo) / (hi - lo)) * (H - P * 2);
+    const d = s.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+    const banda = c.min != null
+      ? `<rect x="0" width="${W}" y="${Y(c.max).toFixed(1)}" height="${(Y(c.min) - Y(c.max)).toFixed(1)}" fill="var(--band)"/>` : "";
+    const color = esDesvio(c) ? "var(--bad)" : c.estado === "OK" ? "var(--avg)" : "var(--idle)";
+    const ult = s[s.length - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${banda}
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+      <circle cx="${X(ult[0]).toFixed(1)}" cy="${Y(ult[1]).toFixed(1)}" r="2.5" fill="${color}"/></svg>`;
+  }
+
+  // ---------------------------------------------------------------- detalle
+  function abrir(id) {
+    if (location.hash !== `#c/${id}`) location.hash = `#c/${id}`;
+    else mostrarDesdeHash();
+  }
+  function cerrar() {
+    if (location.hash.startsWith("#c/")) history.back();
+    else { idDetalle = null; $("#detalle").hidden = true; document.body.style.overflow = ""; }
+  }
+  function mostrarDesdeHash() {
+    const m = location.hash.match(/^#c\/(.+)$/);
+    idDetalle = m ? decodeURIComponent(m[1]) : null;
+    $("#detalle").hidden = !idDetalle;   // primero visible, para medir bien el ancho del gráfico
+    if (idDetalle && estado) renderDetalle();
+    document.body.style.overflow = idDetalle ? "hidden" : "";
+  }
+
+  function renderDetalle() {
+    const c = estado.camaras.find((x) => x.id === idDetalle);
+    if (!c) { cerrar(); return; }
+    $("#det-titulo").textContent = c.nombre;
+    const multi = c.sensores.length > 1;
+
+    $("#det-cuerpo").innerHTML = `
+      <div class="det-head">
+        <div class="big">${fmtT(c.promedio)}<small> °C</small></div>
+        <div class="datos">
+          <div>${pill(c)}</div>
+          <div>Rango permitido <b>${c.min != null ? `${fmtR(c.min)} – ${fmtR(c.max)} °C` : "no configurado"}</b></div>
+          <div>Última lectura <b>${c.ultima_lectura_ms ? fechaHora(c.ultima_lectura_ms) : "–"}</b>${c.humedad != null ? ` · Humedad <b>${Math.round(c.humedad)} %</b>` : ""}</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3><span>Temperatura${multi ? " — promedio y sensores" : ""}</span>
+          <span class="segment" role="group" aria-label="Periodo">
+            ${[6, 12, 24].map((h) => `<button data-h="${h}" aria-pressed="${horasDetalle === h}">${h} h</button>`).join("")}
+          </span></h3>
+        <div class="chart" id="chart"></div>
+        <div class="leyenda" id="leyenda"></div>
+      </div>
+      ${multi ? `<div class="panel"><h3>Sensores</h3>
+        <table class="sens"><thead><tr><th>Sensor</th><th>Valor</th><th>Hora</th><th>Estado</th></tr></thead><tbody>
+        ${c.sensores.map((s, i) => `<tr>
+          <td><span class="sw" style="background:var(${COLORES_SENSOR[i % 3]})"></span>${esc(s.descripcion)}</td>
+          <td class="num"><b>${fmtT(s.valor)} °C</b></td>
+          <td class="num">${s.fecha_ms ? hora(s.fecha_ms) : "–"}</td>
+          <td>${s.fuera_de_rango ? '<span class="pill ALTO">Fuera</span>' : '<span class="pill OK">OK</span>'}</td></tr>`).join("")}
+        </tbody></table></div>` : ""}
+      <p class="pie">Revisión del ${fechaHora(estado.generado_ms)} · <a href="https://www.xsenseccm.com/" target="_blank" rel="noopener">Abrir Xsense</a></p>`;
+
+    document.querySelectorAll(".segment button").forEach((b) => b.addEventListener("click", () => {
+      horasDetalle = +b.dataset.h;
+      renderDetalle();
+    }));
+    dibujarGrafico(c);
+  }
+
+  // Gráfico SVG con línea de promedio, sensores, franja de rango y lectura al tocar
+  function dibujarGrafico(c) {
+    const cont = $("#chart");
+    const W = Math.max(300, cont.clientWidth || 600), H = W < 500 ? 230 : 280;
+    const M = { t: 12, r: 12, b: 26, l: 34 };
+    const fin = (c.serie.at(-1) || [estado.generado_ms])[0];
+    const desde = fin - horasDetalle * 3600e3;
+    const cortar = (s) => (s || []).filter((p) => p[0] >= desde);
+
+    const prom = cortar(c.serie);
+    const multi = c.sensores.length > 1;
+    const sensores = multi ? c.sensores.map((s, i) => ({
+      nombre: s.descripcion, color: `var(${COLORES_SENSOR[i % 3]})`, datos: cortar((c.series_sensores || {})[s.id]),
+    })).filter((s) => s.datos.length) : [];
+
+    if (prom.length < 2) { cont.innerHTML = `<div class="vacio">Sin historial para este periodo.</div>`; $("#leyenda").innerHTML = ""; return; }
+
+    const todos = prom.map((p) => p[1]).concat(...sensores.map((s) => s.datos.map((p) => p[1])));
+    let lo = Math.min(...todos), hi = Math.max(...todos);
+    if (c.min != null) { lo = Math.min(lo, c.min); hi = Math.max(hi, c.max); }
+    const pad = Math.max(0.4, (hi - lo) * 0.12);
+    lo -= pad; hi += pad;
+    const paso = niceStep((hi - lo) / 4);
+    lo = Math.floor(lo / paso) * paso; hi = Math.ceil(hi / paso) * paso;
+
+    const X = (t) => M.l + ((t - desde) / (fin - desde)) * (W - M.l - M.r);
+    const Y = (v) => M.t + (1 - (v - lo) / (hi - lo)) * (H - M.t - M.b);
+    const path = (d) => d.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+
+    let g = "";
+    for (let v = lo; v <= hi + 1e-9; v += paso) {
+      g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/>`;
+      g += `<text class="tick" x="${M.l - 6}" y="${Y(v) + 4}" text-anchor="end">${+v.toFixed(1)}</text>`;
+    }
+    const pasoH = horasDetalle <= 6 ? 1 : horasDetalle <= 12 ? 2 : 4;
+    const primera = Math.ceil(desde / (pasoH * 3600e3)) * pasoH * 3600e3;
+    for (let t = primera; t <= fin; t += pasoH * 3600e3) {
+      g += `<text class="tick" x="${X(t)}" y="${H - 6}" text-anchor="middle">${hora(t)}</text>`;
+    }
+    if (c.min != null) {
+      g += `<rect x="${M.l}" width="${W - M.l - M.r}" y="${Y(c.max)}" height="${Y(c.min) - Y(c.max)}" fill="var(--band)"/>`;
+      for (const v of [c.min, c.max]) g += `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--band-line)" stroke-dasharray="4 3"/>`;
+    }
+    for (const s of sensores) g += `<path d="${path(s.datos)}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-linejoin="round" opacity=".9"/>`;
+    const colorProm = multi ? "var(--ink)" : "var(--avg)";
+    g += `<path d="${path(prom)}" fill="none" stroke="${colorProm}" stroke-width="2.5" stroke-linejoin="round"/>`;
+    if (c.min != null) {
+      for (const p of prom) if (p[1] > c.max || p[1] < c.min)
+        g += `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="3" fill="var(--bad)" stroke="var(--surface)" stroke-width="1"/>`;
+    }
+    const u = prom.at(-1);
+    g += `<circle cx="${X(u[0])}" cy="${Y(u[1])}" r="5" fill="${esDesvio(c) ? "var(--bad)" : colorProm}" stroke="var(--surface)" stroke-width="2"/>`;
+    g += `<g id="cursor" style="display:none"><line id="cur-l" y1="${M.t}" y2="${H - M.b}" stroke="var(--ink-3)" stroke-width="1"/><circle id="cur-c" r="4.5" fill="${colorProm}" stroke="var(--surface)" stroke-width="2"/></g>`;
+    g += `<rect id="hit" x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H}" fill="transparent"/>`;
+
+    cont.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperatura de ${esc(c.nombre)} en las últimas ${horasDetalle} horas">${g}</svg><div class="tooltip" id="tt"></div>`;
+
+    $("#leyenda").innerHTML =
+      (c.min != null ? `<span><i class="banda"></i>Rango ${fmtR(c.min)} – ${fmtR(c.max)} °C</span>` : "") +
+      `<span><i style="background:${colorProm};height:3px"></i>Promedio</span>` +
+      sensores.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.nombre)}</span>`).join("") +
+      (c.min != null ? `<span><i style="background:var(--bad);width:8px;height:8px;border-radius:50%"></i>Fuera de rango</span>` : "");
+
+    // Interacción: tocar o pasar el mouse muestra la lectura de ese momento
+    const svg = cont.querySelector("svg"), tt = $("#tt");
+    const mover = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const px = ((ev.clientX - r.left) / r.width) * W;
+      const t = desde + ((px - M.l) / (W - M.l - M.r)) * (fin - desde);
+      const cerca = (d) => d.reduce((a, b) => (Math.abs(b[0] - t) < Math.abs(a[0] - t) ? b : a));
+      const p = cerca(prom);
+      $("#cursor").style.display = "";
+      $("#cur-l").setAttribute("x1", X(p[0])); $("#cur-l").setAttribute("x2", X(p[0]));
+      $("#cur-c").setAttribute("cx", X(p[0])); $("#cur-c").setAttribute("cy", Y(p[1]));
+      const filas = [`<div class="tt-row"><b>${fechaHora(p[0])}</b></div>`,
+        `<div class="tt-row"><span class="sw" style="background:${colorProm}"></span>Promedio <b>${fmtT(p[1])} °C</b></div>`]
+        .concat(sensores.map((s) => `<div class="tt-row"><span class="sw" style="background:${s.color}"></span>${esc(s.nombre.slice(0, 22))} <b>${fmtT(cerca(s.datos)[1])} °C</b></div>`));
+      tt.innerHTML = filas.join("");
+      const xPx = (X(p[0]) / W) * r.width;
+      tt.style.left = Math.min(Math.max(xPx, tt.offsetWidth / 2), r.width - tt.offsetWidth / 2) + "px";
+      tt.classList.add("on");
+    };
+    const salir = () => { $("#cursor").style.display = "none"; tt.classList.remove("on"); };
+    const hit = svg.querySelector("#hit");
+    hit.addEventListener("pointermove", mover);
+    hit.addEventListener("pointerdown", mover);
+    hit.addEventListener("pointerleave", salir);
+  }
+
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  }
+
+  // ---------------------------------------------------------------- arranque
+  $("#btn-actualizar").addEventListener("click", () => cargar(true));
+  $("#btn-volver").addEventListener("click", cerrar);
+  window.addEventListener("hashchange", mostrarDesdeHash);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && idDetalle) cerrar(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) cargar(); });
+  let anchoPrevio = innerWidth;
+  window.addEventListener("resize", () => {
+    if (idDetalle && Math.abs(innerWidth - anchoPrevio) > 40) { anchoPrevio = innerWidth; renderDetalle(); }
+  });
+
+  cargar().then(mostrarDesdeHash);
+  setInterval(() => { if (!document.hidden) cargar(); }, REFRESCO_MS);
+  setInterval(() => { if (estado) renderMeta(); }, 30 * 1000);
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>

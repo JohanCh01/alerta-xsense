@@ -1,0 +1,13 @@
+# Credenciales: NUNCA se suben a GitHub
+.env
+
+# Archivos de Python
+__pycache__/
+*.pyc
+
+# Pruebas locales
+estado_actual.json
+
+# Datos generados por el monitor (se publican directo en la app, no se guardan en el historial)
+docs/data/estado.json
+docs/graficos/*.png

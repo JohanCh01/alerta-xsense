@@ -1,0 +1,60 @@
+# Revisa las temperaturas de Xsense y publica la app con los datos nuevos.
+# Corre solo cada 12 minutos (GitHub puede atrasarse algunos minutos),
+# cuando se sube un cambio a la app, o a mano desde la pestaña "Actions".
+name: Monitor Xsense
+
+on:
+  schedule:
+    - cron: "*/12 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["docs/**", "monitor/**", ".github/workflows/monitor.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: monitor-xsense
+  cancel-in-progress: false
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: monitor/requirements.txt
+
+      - name: Instalar librerías
+        run: pip install -r monitor/requirements.txt
+
+      - name: Revisar temperaturas en Xsense
+        env:
+          XSENSE_EMAIL: ${{ secrets.XSENSE_EMAIL }}
+          XSENSE_PASSWORD: ${{ secrets.XSENSE_PASSWORD }}
+        run: python monitor/xsense_monitor.py
+
+      - name: Preparar la publicación
+        uses: actions/configure-pages@v5
+
+      - name: Empaquetar la app con los datos
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Publicar en GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
