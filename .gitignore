@@ -11,3 +11,6 @@ estado_actual.json
 # Datos generados por el monitor (se publican directo en la app, no se guardan en el historial)
 docs/data/estado.json
 docs/graficos/*.png
+
+# Diagnóstico de errores de login
+monitor/diagnostico_login.*

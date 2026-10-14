@@ -47,6 +47,15 @@ jobs:
           XSENSE_PASSWORD: ${{ secrets.XSENSE_PASSWORD }}
         run: python monitor/xsense_monitor.py
 
+      - name: Guardar diagnóstico si falló el login
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-login
+          path: monitor/diagnostico_login.*
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: Preparar la publicación
         uses: actions/configure-pages@v5
 

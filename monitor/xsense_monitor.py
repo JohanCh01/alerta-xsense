@@ -41,6 +41,7 @@ from pathlib import Path
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -69,6 +70,17 @@ HEADERS = {"Accept": "application/json"}  # sin esto Xsense responde en XML
 INTERVALO_MINUTOS = 12      # cada cuánto revisa en modo --bucle
 MINUTOS_SIN_LECTURA = 30    # sin lecturas en este tiempo -> "SIN LECTURAS" (reportan cada ~8 min)
 HORAS_HISTORIAL = 24        # horas de historial para los gráficos
+
+# Botón "INICIAR SESIÓN" (o "SIGN IN"/"LOGIN" si la página sale en inglés), sin importar mayúsculas
+_MAYUS = "ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚ"
+_MINUS = "abcdefghijklmnopqrstuvwxyzáéíóú"
+_TXT = f"translate(normalize-space(.), '{_MAYUS}', '{_MINUS}')"
+XPATH_BOTON_LOGIN = (
+    f"//*[self::button or self::a or self::span or self::div or self::input]"
+    f"[contains({_TXT}, 'iniciar sesi') or contains({_TXT}, 'sign in') or "
+    f"{_TXT}='login' or {_TXT}='log in' or {_TXT}='ingresar' or {_TXT}='entrar']"
+    f"[not(.//*[contains({_TXT}, 'iniciar sesi') or contains({_TXT}, 'sign in')])]"
+)
 
 # Colores del gráfico PNG
 COLOR_FONDO = "#fcfcfb"
@@ -124,6 +136,10 @@ def _crear_navegador(ver_navegador: bool):
     opciones.add_argument("--window-size=1600,1000")
     opciones.add_argument("--no-sandbox")
     opciones.add_argument("--disable-dev-shm-usage")
+    # El servidor de GitHub está en inglés: forzamos español para que Xsense
+    # muestre la misma página que en la laptop
+    opciones.add_argument("--lang=es-PE")
+    opciones.add_experimental_option("prefs", {"intl.accept_languages": "es-PE,es"})
     return webdriver.Chrome(options=opciones)
 
 
@@ -145,7 +161,7 @@ def _escribir(wait, xpath, texto, intentos=5):
             campo.click()
             campo.clear()
             campo.send_keys(texto)
-            return
+            return campo
         except Exception as e:  # el formulario a veces tarda en "activarse"
             ultimo_error = e
             time.sleep(1)
@@ -161,10 +177,15 @@ def iniciar_sesion(email: str, password: str, ver_navegador: bool = False) -> re
         time.sleep(1.5)
 
         _escribir(wait, "//input[@type='email' or contains(@placeholder,'correo')]", email)
-        _escribir(wait, "//input[@type='password']", password)
-        boton = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//*[contains(text(),'INICIAR SESIÓN') or contains(text(),'Iniciar sesión')]")))
-        boton.click()
+        campo_clave = _escribir(wait, "//input[@type='password']", password)
+
+        # Botón de ingreso: en español o en inglés (según el idioma del navegador).
+        # Si no aparece, se envía el formulario con Enter desde la contraseña.
+        try:
+            boton = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, XPATH_BOTON_LOGIN)))
+            boton.click()
+        except Exception:
+            campo_clave.send_keys(Keys.ENTER)
 
         sesion = requests.Session()
         sesion.headers.update(HEADERS)
@@ -175,10 +196,23 @@ def iniciar_sesion(email: str, password: str, ver_navegador: bool = False) -> re
                 sesion.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path", "/"))
             if _sesion_funciona(sesion):
                 return sesion
-        raise RuntimeError("Se hizo clic en INICIAR SESIÓN pero la API no respondió "
-                           "(prueba con --ver para mirar el navegador).")
+        raise RuntimeError("Se envió el login pero la API no respondió "
+                           "(usuario/contraseña incorrectos o Xsense cambió su página).")
+    except Exception:
+        _guardar_diagnostico(driver)
+        raise
     finally:
         driver.quit()
+
+
+def _guardar_diagnostico(driver):
+    """Si el login falla, guarda una captura y el HTML de la página para revisar qué pasó."""
+    try:
+        driver.save_screenshot(str(MONITOR_DIR / "diagnostico_login.png"))
+        (MONITOR_DIR / "diagnostico_login.html").write_text(driver.page_source, encoding="utf-8")
+        print("   (se guardó diagnostico_login.png / .html para revisar el error)")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
