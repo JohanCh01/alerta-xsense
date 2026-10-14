@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "*/12 * * * *"
   workflow_dispatch:
+    inputs:
+      prueba:
+        description: "Enviar además una notificación de prueba a los celulares registrados"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ["docs/**", "monitor/**", ".github/workflows/monitor.yml"]
@@ -42,6 +47,7 @@ jobs:
         run: pip install -r monitor/requirements.txt
 
       - name: Revisar temperaturas en Xsense
+        id: revisar
         env:
           XSENSE_EMAIL: ${{ secrets.XSENSE_EMAIL }}
           XSENSE_PASSWORD: ${{ secrets.XSENSE_PASSWORD }}
@@ -67,3 +73,24 @@ jobs:
       - name: Publicar en GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
+
+      # Las alertas van después de publicar, para que la imagen del gráfico ya esté en línea
+      - name: Enviar alertas al celular
+        continue-on-error: true
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python monitor/notificar.py
+
+      - name: Avisar que el monitor no pudo revisar Xsense
+        if: failure() && steps.revisar.outcome == 'failure'
+        continue-on-error: true
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python monitor/notificar.py --error
+
+      - name: Notificación de prueba
+        if: github.event_name == 'workflow_dispatch' && inputs.prueba
+        continue-on-error: true
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python monitor/notificar.py --prueba

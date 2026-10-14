@@ -113,6 +113,34 @@
   .icon-btn.girando svg { animation: girar 1s linear infinite; }
   @keyframes girar { to { transform: rotate(360deg); } }
 
+  .btn-alertas[aria-pressed="true"] { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+  .btn-alertas[aria-pressed="true"] svg { fill: currentColor; }
+  .btn-alertas.bloqueado { color: var(--ink-3); }
+
+  .invita {
+    margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--surface);
+    border: 1px solid var(--line); display: flex; gap: 12px; align-items: center; box-shadow: var(--shadow);
+  }
+  .invita p { margin: 0; flex: 1; font-size: 13.5px; color: var(--ink-2); }
+  .invita p b { color: var(--ink); display: block; font-size: 14px; }
+  .btn-prim {
+    border: 0; border-radius: 10px; padding: 9px 14px; font-weight: 700; font-size: 13.5px;
+    background: var(--ink); color: var(--bg); cursor: pointer; white-space: nowrap;
+  }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 40;
+    transform: translate(-50%, 140%); transition: transform .25s ease;
+    width: min(520px, calc(100% - 24px)); background: var(--ink); color: var(--bg);
+    border-radius: 14px; padding: 12px 14px; display: flex; gap: 12px; align-items: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25);
+  }
+  .toast.on { transform: translate(-50%, 0); }
+  .toast .tx { flex: 1; min-width: 0; font-size: 13.5px; }
+  .toast .tx b { display: block; font-size: 14px; }
+  .toast button { border: 0; background: var(--bg); color: var(--ink); border-radius: 9px; padding: 7px 12px; font-weight: 700; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+
   .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
   .meta b { color: var(--ink); font-weight: 600; }
 
@@ -218,6 +246,7 @@
   .pie a { color: inherit; }
 
   @media (max-width: 520px) {
+    .titles h1 { font-size: 16px; }
     .grid { grid-template-columns: 1fr; }
     .stat .num { font-size: 22px; }
     .det-head .big { font-size: 38px; }
@@ -237,6 +266,9 @@
         <h1>Temperaturas de cámaras</h1>
         <p id="subtitulo">Packing Espárrago · Xsense</p>
       </div>
+      <button class="icon-btn btn-alertas" id="btn-alertas" title="Activar alertas en este celular" aria-label="Activar alertas" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      </button>
       <button class="icon-btn" id="btn-actualizar" title="Actualizar" aria-label="Actualizar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
       </button>
@@ -245,8 +277,10 @@
     <div id="aviso"></div>
   </div>
 </header>
+<div class="toast" id="toast" role="status" aria-live="polite"><div class="tx" id="toast-tx"></div><button id="toast-ver">Ver</button></div>
 
 <main class="wrap">
+  <div id="invita-alertas"></div>
   <div class="resumen" id="resumen"></div>
   <div class="grid" id="grid"></div>
   <p class="pie">Datos de Xsense · se revisan automáticamente cada <span id="intervalo">12</span> min</p>
@@ -599,6 +633,13 @@
     if (idDetalle && Math.abs(innerWidth - anchoPrevio) > 40) { anchoPrevio = innerWidth; renderDetalle(); }
   });
 
+  window.addEventListener("alerta-recibida", () => cargar(true));
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data && e.data.abrir) location.href = e.data.abrir;
+    });
+  }
+
   cargar().then(mostrarDesdeHash);
   setInterval(() => { if (!document.hidden) cargar(); }, REFRESCO_MS);
   setInterval(() => { if (estado) renderMeta(); }, 30 * 1000);
@@ -607,6 +648,157 @@
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 })();
+</script>
+
+<script type="module">
+  // ---------------------------------------------------------------- notificaciones push
+  import { initializeApp } from "./vendor/firebase-12.19.0/firebase-app.js";
+  import { getMessaging, getToken, onMessage, isSupported } from "./vendor/firebase-12.19.0/firebase-messaging.js";
+
+  const CONFIG = {
+    apiKey: "AIzaSyD3ydrhq5Togj7kYv66MC224kUJWKalUko",
+    authDomain: "alerta-xsense.firebaseapp.com",
+    projectId: "alerta-xsense",
+    storageBucket: "alerta-xsense.firebasestorage.app",
+    messagingSenderId: "104854126939",
+    appId: "1:104854126939:web:63d0619b74774e6a22da7e",
+  };
+  const VAPID = "BCZ1XzfYCMpK3LBKgCiKIpS2Fa7cq6VWyvCSM_okLfrCVJDEaGuu_iPvT76CeURjO0FaeK1xQLpF5Ud2W5T5JX0";
+
+  const btn = document.getElementById("btn-alertas");
+  const invita = document.getElementById("invita-alertas");
+  const toast = document.getElementById("toast");
+  const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const instalada = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  let messaging = null, registro = null, ocupado = false;
+
+  function modo(m) {
+    btn.hidden = false;
+    btn.classList.toggle("bloqueado", m === "bloqueado" || m === "no-soportado");
+    btn.setAttribute("aria-pressed", String(m === "activo"));
+    btn.title = {
+      activo: "Alertas activadas en este celular",
+      inactivo: "Activar alertas en este celular",
+      bloqueado: "Las notificaciones están bloqueadas para esta app",
+      "no-soportado": "Este navegador no puede recibir alertas",
+    }[m];
+    invita.innerHTML = m === "inactivo"
+      ? `<div class="invita"><p><b>Recibe las alertas en este celular</b>Te avisaremos apenas una cámara salga de su rango, aunque la app esté cerrada.</p><button class="btn-prim" id="btn-activar">Activar</button></div>`
+      : "";
+    const b = document.getElementById("btn-activar");
+    if (b) b.addEventListener("click", activar);
+  }
+
+  async function sha256(texto) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+    return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+
+  // Guarda el "identificador" del celular en Firestore para que el monitor sepa a quién avisar
+  async function guardarToken(token) {
+    const id = await sha256(token);
+    const url = `https://firestore.googleapis.com/v1/projects/${CONFIG.projectId}/databases/(default)/documents/dispositivos/${id}?key=${CONFIG.apiKey}`;
+    const r = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: {
+        token: { stringValue: token },
+        plataforma: { stringValue: navigator.userAgent.slice(0, 200) },
+        actualizado: { timestampValue: new Date().toISOString() },
+      } }),
+    });
+    if (!r.ok) throw new Error(`No se pudo registrar el celular (${r.status})`);
+  }
+
+  async function registrar() {
+    registro = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const token = await getToken(messaging, { vapidKey: VAPID, serviceWorkerRegistration: registro });
+    if (!token) throw new Error("No se obtuvo el identificador del celular");
+    await guardarToken(token);
+  }
+
+  async function activar() {
+    if (ocupado) return;
+    if (!messaging) {
+      avisar("No disponible aquí", esIOS && !instalada
+        ? "En iPhone primero instala la app: botón Compartir → «Agregar a inicio», y ábrela desde el ícono."
+        : "Este navegador no puede recibir alertas. Usa Chrome en Android o instala la app.");
+      return;
+    }
+    ocupado = true;
+    try {
+      const permiso = await Notification.requestPermission();
+      if (permiso !== "granted") {
+        modo(permiso === "denied" ? "bloqueado" : "inactivo");
+        if (permiso === "denied") avisar("Notificaciones bloqueadas", "Actívalas en los ajustes del celular: Ajustes → Apps → Alerta Xsense → Notificaciones.");
+        return;
+      }
+      await registrar();
+      modo("activo");
+      registro.showNotification("✅ Alertas activadas", {
+        body: "Recibirás un aviso cuando una cámara de Packing Espárrago salga de su rango.",
+        icon: "icons/icon-192.png", badge: "icons/badge-96.png", tag: "bienvenida",
+      });
+    } catch (e) {
+      console.error(e);
+      avisar("No se pudieron activar las alertas", "Revisa tu conexión a internet e inténtalo de nuevo.");
+      modo("inactivo");
+    } finally {
+      ocupado = false;
+    }
+  }
+
+  let urlToast = null, timerToast = null;
+  function avisar(titulo, texto, url = null) {
+    document.getElementById("toast-tx").innerHTML = "";
+    const b = document.createElement("b"); b.textContent = titulo;
+    document.getElementById("toast-tx").append(b, document.createTextNode(texto));
+    urlToast = url;
+    document.getElementById("toast-ver").textContent = url ? "Ver" : "OK";
+    toast.classList.add("on");
+    clearTimeout(timerToast);
+    timerToast = setTimeout(() => toast.classList.remove("on"), 9000);
+  }
+  document.getElementById("toast-ver").addEventListener("click", () => {
+    toast.classList.remove("on");
+    if (urlToast) location.href = urlToast;
+  });
+
+  btn.addEventListener("click", () => {
+    if (btn.getAttribute("aria-pressed") === "true") {
+      avisar("Alertas activadas", "Este celular ya recibe las alertas de temperatura.");
+    } else if (btn.classList.contains("bloqueado") && Notification?.permission === "denied") {
+      avisar("Notificaciones bloqueadas", "Actívalas en los ajustes del celular: Ajustes → Apps → Alerta Xsense → Notificaciones.");
+    } else {
+      activar();
+    }
+  });
+
+  (async () => {
+    const soportado = "serviceWorker" in navigator && "Notification" in window && await isSupported().catch(() => false);
+    if (!soportado) { modo("no-soportado"); return; }
+    messaging = getMessaging(initializeApp(CONFIG));
+
+    // Con la app abierta: aviso dentro de la app + notificación del sistema
+    onMessage(messaging, async (payload) => {
+      const d = payload.data || {};
+      avisar(d.titulo || "Alerta Xsense", d.cuerpo || "", d.url || null);
+      window.dispatchEvent(new Event("alerta-recibida"));
+      const reg = registro || await navigator.serviceWorker.ready;
+      reg.showNotification(d.titulo || "Alerta Xsense", {
+        body: d.cuerpo || "", icon: "icons/icon-192.png", badge: "icons/badge-96.png",
+        image: d.imagen || undefined, tag: d.tag || undefined, renotify: true, data: { url: d.url },
+      });
+    });
+
+    if (Notification.permission === "granted") {
+      modo("activo");
+      registrar().catch((e) => console.warn("No se pudo renovar el registro:", e));  // mantiene vigente el registro
+    } else {
+      modo(Notification.permission === "denied" ? "bloqueado" : "inactivo");
+    }
+  })();
 </script>
 </body>
 </html>

@@ -20,6 +20,7 @@ GitHub Actions (cada 12 min)
 | `monitor/xsense_monitor.py` | Script que lee Xsense y genera los datos |
 | `docs/index.html` | La app (tarjetas de las cámaras + detalle con gráfico) |
 | `docs/manifest.webmanifest`, `docs/sw.js`, `docs/icons/` | Lo que permite instalarla en el celular |
+| `monitor/notificar.py` | Envía las alertas al celular |
 | `.github/workflows/monitor.yml` | La automatización que corre cada 12 minutos |
 
 Los datos (`estado.json`, gráficos) **no se guardan en el historial del repositorio**: se
@@ -66,6 +67,20 @@ Para ver la app con los datos locales: `cd docs && python -m http.server 8000` y
 En cámaras con varios sensores, la tarjeta avisa además cuántos sensores están fuera de rango
 aunque el promedio esté bien.
 
-## Próximo paso
+## Notificaciones al celular
 
-Notificaciones push al celular cuando una cámara sale de rango (con el gráfico).
+Después de publicar la app, `monitor/notificar.py` envía notificaciones push (Firebase Cloud Messaging)
+a los celulares que tocaron **Activar alertas** en la app:
+
+| Cuándo | Aviso |
+|---|---|
+| Una cámara sale de su rango o deja de reportar | ⚠️ Desviación (con el gráfico) |
+| Sigue fuera de rango | ⏱ Recordatorio cada 30 min |
+| Vuelve a su rango | ✅ Volvió a la normalidad |
+| El monitor no pudo revisar Xsense | ⚠️ Aviso (máximo 1 por hora) |
+
+Al tocar la notificación se abre la app directo en la cámara.
+
+Requiere el secreto `FIREBASE_SERVICE_ACCOUNT` (contenido del `.json` de la cuenta de servicio de
+Firebase) y Firestore creado. Para probar: *Actions → Monitor Xsense → Run workflow* marcando
+**"Enviar además una notificación de prueba"**.
