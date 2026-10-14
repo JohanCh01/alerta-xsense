@@ -42,6 +42,7 @@ RECORDATORIO_MIN = 30          # cada cuánto se repite el aviso si sigue fuera 
 AVISO_ERROR_MIN = 60           # como máximo un aviso de "monitor caído" por hora
 ESTADOS_ALERTA = ("ALTO", "BAJO", "SIN_LECTURAS")
 
+PROYECTO_FIREBASE = "alerta-xsense"
 COLECCION_DISPOSITIVOS = "dispositivos"
 DOC_CONTROL = ("control", "alertas")
 
@@ -157,9 +158,29 @@ def conectar():
         return None
     import firebase_admin
     from firebase_admin import credentials, firestore
+    try:
+        datos = json.loads(credencial_json)
+    except json.JSONDecodeError:
+        _anotar("error", "FIREBASE_SERVICE_ACCOUNT no es un JSON válido: vuelve a pegar el contenido completo del .json.")
+        raise SystemExit(1)
+    proyecto = datos.get("project_id")
+    print(f"Cuenta de servicio: {datos.get('client_email')} (proyecto {proyecto})")
+    if datos.get("type") != "service_account":
+        _anotar("error", "FIREBASE_SERVICE_ACCOUNT no es una clave de cuenta de servicio "
+                         "(Configuración → Cuentas de servicio → Generar nueva clave privada).")
+        raise SystemExit(1)
+    if proyecto != PROYECTO_FIREBASE:
+        _anotar("error", f"La clave es del proyecto '{proyecto}', no de '{PROYECTO_FIREBASE}'. "
+                         "Genera la clave desde el proyecto alerta-xsense de Firebase.")
+        raise SystemExit(1)
     if not firebase_admin._apps:
-        firebase_admin.initialize_app(credentials.Certificate(json.loads(credencial_json)))
+        firebase_admin.initialize_app(credentials.Certificate(datos))
     return firestore.client()
+
+
+def _anotar(nivel: str, texto: str):
+    """Mensaje que GitHub muestra en el resumen de la ejecución (nivel: notice / warning / error)."""
+    print(f"::{nivel}::{texto}")
 
 
 def leer_control(db) -> dict:
@@ -180,7 +201,7 @@ def enviar(db, avisos: list) -> int:
     dispositivos = [(d.id, (d.to_dict() or {}).get("token")) for d in db.collection(COLECCION_DISPOSITIVOS).stream()]
     dispositivos = [(i, t) for i, t in dispositivos if t]
     if not dispositivos:
-        print("No hay celulares registrados todavía (nadie tocó 'Activar alertas').")
+        _anotar("warning", "No hay celulares registrados todavía: nadie tocó 'Activar alertas' en la app.")
         return 0
 
     ahora = str(int(time.time() * 1000))
@@ -213,8 +234,8 @@ def enviar(db, avisos: list) -> int:
 
     for doc_id in invalidos:  # celulares que desinstalaron la app o bloquearon las notificaciones
         db.collection(COLECCION_DISPOSITIVOS).document(doc_id).delete()
-    print(f"Notificaciones: {len(avisos)} aviso(s) × {len(dispositivos)} celular(es) → "
-          f"{entregados} entregadas, {len(invalidos)} celular(es) dado(s) de baja.")
+    _anotar("notice", f"Notificaciones: {len(avisos)} aviso(s) × {len(dispositivos)} celular(es) → "
+                      f"{entregados} entregadas, {len(invalidos)} celular(es) dado(s) de baja.")
     return entregados
 
 
@@ -266,12 +287,20 @@ def main():
     db = conectar()
     if db is None:
         return
-    if "--error" in sys.argv:
-        procesar_error(db)
-    elif "--prueba" in sys.argv:
-        procesar_prueba(db)
-    else:
-        procesar_estado(db)
+    try:
+        if "--error" in sys.argv:
+            procesar_error(db)
+        elif "--prueba" in sys.argv:
+            procesar_prueba(db)
+        else:
+            procesar_estado(db)
+    except Exception as e:
+        texto = str(e).splitlines()[0][:300]
+        if "insufficient permissions" in texto.lower() or "403" in texto:
+            texto += (" — La cuenta de servicio no tiene acceso a Firestore. Revisa que la clave sea del "
+                      "proyecto alerta-xsense y que Firestore esté creado; si recién se creó, espera unos minutos.")
+        _anotar("error", f"Notificaciones: {texto}")
+        raise
 
 
 if __name__ == "__main__":
