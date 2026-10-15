@@ -277,8 +277,23 @@ def _hora_lima(ms):
     return datetime.fromtimestamp(ms / 1000, ZONA_LIMA) if ms else None
 
 
-def _fuera(valor, t_min, t_max):
-    return valor is not None and t_min is not None and t_max is not None and (valor > t_max or valor < t_min)
+def _fuera(valor, t_min, t_max, tol=0.0):
+    return (valor is not None and t_min is not None and t_max is not None
+            and (valor > t_max + tol + 1e-9 or valor < t_min - tol - 1e-9))
+
+
+def tolerancia_xsense(detalle: dict):
+    """Tolerancia (°C) de la regla 'Temp. fuera del intervalo' que la cámara tiene en Xsense.
+    Devuelve None si la cámara no tiene esa regla activa (entonces no se aplica tolerancia)."""
+    for regla in detalle.get("rules") or []:
+        params = regla.get("params") or {}
+        if (regla.get("type") == "THRESHOLD_BREACH" and params.get("SENSOR_TYPE", "TEMP") == "TEMP"
+                and regla.get("active", True) and regla.get("applied", True) and not regla.get("archived")):
+            try:
+                return abs(float(params.get("OFFSET") or 0))
+            except (TypeError, ValueError):
+                return 0.0
+    return None
 
 
 def evaluar(item: dict, detalle: dict) -> dict:
@@ -286,6 +301,8 @@ def evaluar(item: dict, detalle: dict) -> dict:
     t_min = (umbral.get("min") or {}).get("1")  # "1" = temperatura, "2" = humedad
     t_max = (umbral.get("max") or {}).get("1")
     promedio = (detalle.get("averages") or item.get("averages") or {}).get("TEMP")
+    regla_tol = tolerancia_xsense(detalle)      # None = la cámara no tiene regla de alerta en Xsense
+    tol = regla_tol or 0.0
 
     sensores = []
     for tag in detalle.get("tags") or []:
@@ -299,7 +316,7 @@ def evaluar(item: dict, detalle: dict) -> dict:
                     "valor": valor,
                     "fecha_ms": ms,
                     "hora": _hora_lima(ms).strftime("%Y-%m-%d %H:%M") if ms else None,
-                    "fuera_de_rango": _fuera(valor, t_min, t_max),
+                    "fuera_de_rango": _fuera(valor, t_min, t_max, tol),
                     "fuera_segun_xsense": bool(lectura.get("breach")),
                 })
 
@@ -312,10 +329,12 @@ def evaluar(item: dict, detalle: dict) -> dict:
         estado = "SIN_LECTURAS"
     elif promedio is None:
         estado = "SIN_DATO"
-    elif promedio > t_max:
+    elif promedio > t_max + tol + 1e-9:
         estado = "ALTO"
-    elif promedio < t_min:
+    elif promedio < t_min - tol - 1e-9:
         estado = "BAJO"
+    elif promedio > t_max or promedio < t_min:
+        estado = "LIMITE"       # pasó el rango pero está dentro de la tolerancia de Xsense: no se alerta
     else:
         estado = "OK"
 
@@ -325,6 +344,8 @@ def evaluar(item: dict, detalle: dict) -> dict:
         "tipo": item.get("type"),
         "min": t_min,
         "max": t_max,
+        "tolerancia": tol,
+        "regla_xsense": regla_tol is not None,
         "promedio": promedio,
         "humedad": (detalle.get("averages") or item.get("averages") or {}).get("RH"),
         "ultima_lectura": ultima.strftime("%Y-%m-%d %H:%M") if ultima else None,
@@ -378,7 +399,8 @@ def generar_grafico(camara: dict, ruta: Path) -> Path:
         ys = [v for _, v in serie]
         valores += ys
         ax.plot(xs, ys, color=COLOR_TEXTO if varios else COLOR_PROMEDIO, lw=2.2, label="Promedio")
-        fuera = [(x, y) for x, y in zip(xs, ys) if y > t_max or y < t_min]
+        tol = camara.get("tolerancia") or 0
+        fuera = [(x, y) for x, y in zip(xs, ys) if y > t_max + tol or y < t_min - tol]
         if fuera:
             ax.scatter([x for x, _ in fuera], [y for _, y in fuera], s=12, color=COLOR_FUERA,
                        zorder=3, label="Fuera de rango")
@@ -417,7 +439,7 @@ def generar_grafico(camara: dict, ruta: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Consola
 # ---------------------------------------------------------------------------
-ICONOS = {"OK": "OK ", "ALTO": "ALTO", "BAJO": "BAJO", "SIN_RANGO": "----",
+ICONOS = {"OK": "OK ", "ALTO": "ALTO", "BAJO": "BAJO", "LIMITE": "LÍMITE", "SIN_RANGO": "----",
           "SIN_LECTURAS": "SIN LECT.", "SIN_DATO": "?"}
 
 
@@ -427,6 +449,8 @@ def imprimir(resultados: list):
     print("-" * 75)
     for r in resultados:
         rango = f"{r['min']}–{r['max']}" if r["min"] is not None else "sin rango"
+        if r.get("tolerancia"):
+            rango += f" ±{r['tolerancia']:g}"
         prom = f"{r['promedio']:.1f}" if r["promedio"] is not None else "-"
         hora = r["ultima_lectura"][-5:] if r["ultima_lectura"] else "-"
         print(f"{r['nombre'][:34]:<34} {rango:<12} {prom:>6}  {hora:<6}  {ICONOS.get(r['estado'], r['estado'])}")
@@ -474,6 +498,10 @@ def revisar(sesion) -> dict:
         resultados.append(res)
 
     imprimir(resultados)
+    if os.environ.get("GITHUB_ACTIONS"):
+        tol = "; ".join(f"{r['nombre'][:2]}:{('±%g' % r['tolerancia']) if r['regla_xsense'] else 'sin regla'}"
+                        f"→{r['estado']}" for r in resultados)
+        print(f"::notice::Tolerancias Xsense y estado: {tol}")
     estado = {
         "generado": datetime.now(ZONA_LIMA).strftime("%Y-%m-%d %H:%M:%S"),
         "generado_ms": int(time.time() * 1000),

@@ -78,10 +78,11 @@ def _hora(c):
 
 
 def _detalle_desvio(c):
+    tol = f" (tolerancia ±{_r(c['tolerancia'])})" if c.get("tolerancia") else ""
     if c["estado"] == "ALTO":
-        return f"{_t(c['promedio'] - c['max'])} °C por encima del máximo"
+        return f"{_t(c['promedio'] - c['max'])} °C por encima del máximo{tol}"
     if c["estado"] == "BAJO":
-        return f"{_t(c['min'] - c['promedio'])} °C por debajo del mínimo"
+        return f"{_t(c['min'] - c['promedio'])} °C por debajo del mínimo{tol}"
     return ""
 
 
@@ -109,6 +110,10 @@ def mensaje_recordatorio(c, fuera_ms):
 
 
 def mensaje_normal(c, fuera_ms):
+    if c["estado"] == "LIMITE":
+        return ("✅ Dentro de la tolerancia — " + c["nombre"],
+                f"{_t(c['promedio'])} °C · rango {_r(c['min'])}–{_r(c['max'])} °C (±{_r(c.get('tolerancia'))}) · "
+                f"lectura {_hora(c)}\nEstuvo fuera {_duracion(fuera_ms)}")
     return ("✅ Volvió a la normalidad — " + c["nombre"],
             f"{_t(c['promedio'])} °C · rango {_r(c['min'])}–{_r(c['max'])} °C · lectura {_hora(c)}\n"
             f"Estuvo fuera de rango {_duracion(fuera_ms)}")
