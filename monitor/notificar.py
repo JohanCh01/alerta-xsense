@@ -246,8 +246,9 @@ def enviar(db, avisos: list) -> int:
     return entregados
 
 
-def resumen_timbre(avisos: list) -> dict:
-    """Un solo aviso que resume todo lo de esta revisión (es el que suena y vibra)."""
+def resumen_timbre(avisos: list, fuera: list = None) -> dict:
+    """Un solo aviso que resume todo lo de esta revisión (es el que suena y vibra).
+    fuera: nombres de TODAS las cámaras fuera de rango ahora (no solo las que tocaba avisar)."""
     camaras = [a for a in avisos if a["tipo"] in ("desviacion", "recordatorio")]
     nuevas = [a for a in camaras if a["tipo"] == "desviacion"]
     if any(a["tipo"] == "error" for a in avisos):
@@ -255,20 +256,20 @@ def resumen_timbre(avisos: list) -> dict:
     elif any(a["tipo"] == "prueba" for a in avisos):
         titulo, cuerpo = "🚨 Prueba de timbre", "Así sonará y vibrará el celular cuando haya una desviación."
     else:
-        nombres = [a["titulo"].split(" — ", 1)[-1] for a in camaras]
-        n = len(camaras)
+        nombres = fuera or [a["titulo"].split(" — ", 1)[-1] for a in camaras]
+        n = len(nombres)
         titulo = f"🚨 {n} cámara{'s' if n != 1 else ''} fuera de rango" + (f" ({len(nuevas)} nueva{'s' if len(nuevas) != 1 else ''})" if nuevas and len(nuevas) < n else "")
         cuerpo = " · ".join(nombres[:4]) + (f" y {n - 4} más" if n > 4 else "")
     return dict(tipo="timbre", titulo=titulo, cuerpo=cuerpo, url=URL_APP, imagen="", tag="timbre")
 
 
-def enviar_con_timbre(db, avisos: list):
+def enviar_con_timbre(db, avisos: list, fuera: list = None):
     """Si algo requiere atención: alertas por cámara en silencio + resumen que suena TIMBRES veces."""
     if not any(a["tipo"] in TIPOS_QUE_SUENAN for a in avisos):
         enviar(db, avisos)                      # p. ej. solo "volvió a la normalidad": suena una vez
         return
     enviar(db, [{**a, "silencioso": "1"} for a in avisos])
-    timbre = resumen_timbre(avisos)
+    timbre = resumen_timbre(avisos, fuera)
     for i in range(TIMBRES):
         time.sleep(SEGUNDOS_ENTRE_TIMBRES if i else 2)
         enviar(db, [{**timbre, "repeticion": str(i + 1)}])
@@ -293,7 +294,8 @@ def procesar_estado(db):
 
     for a in avisos:
         print(f"-> {a['titulo']}")
-    enviar_con_timbre(db, avisos)
+    fuera = [c["nombre"] for c in estado.get("camaras", []) if c["estado"] in ESTADOS_ALERTA]
+    enviar_con_timbre(db, avisos, fuera)
     guardar_control(db, {"camaras": alertas, "actualizado_ms": ahora_ms})
 
 
