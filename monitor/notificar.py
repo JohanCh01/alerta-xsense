@@ -38,6 +38,13 @@ MONITOR_DIR = Path(__file__).resolve().parent
 ARCHIVO_ESTADO = MONITOR_DIR.parent / "docs" / "data" / "estado.json"
 URL_APP = "https://johanch01.github.io/alerta-xsense/"
 
+# "Timbre": cuando hay algo que atender, el celular suena y vibra TIMBRES veces seguidas,
+# sin importar cuántas cámaras estén desviadas. Las alertas de cada cámara llegan en silencio
+# (quedan en la bandeja con su detalle) y un aviso-resumen es el que suena.
+TIMBRES = 3
+SEGUNDOS_ENTRE_TIMBRES = 4      # Android ignora sonidos de una misma app demasiado seguidos
+TIPOS_QUE_SUENAN = ("desviacion", "recordatorio", "error", "prueba")
+
 RECORDATORIO_MIN = 30          # cada cuánto se repite el aviso si sigue fuera de rango
 AVISO_ERROR_MIN = 60           # como máximo un aviso de "monitor caído" por hora
 ESTADOS_ALERTA = ("ALTO", "BAJO", "SIN_LECTURAS")
@@ -239,6 +246,34 @@ def enviar(db, avisos: list) -> int:
     return entregados
 
 
+def resumen_timbre(avisos: list) -> dict:
+    """Un solo aviso que resume todo lo de esta revisión (es el que suena y vibra)."""
+    camaras = [a for a in avisos if a["tipo"] in ("desviacion", "recordatorio")]
+    nuevas = [a for a in camaras if a["tipo"] == "desviacion"]
+    if any(a["tipo"] == "error" for a in avisos):
+        titulo, cuerpo = "🚨 El monitor no pudo revisar Xsense", "Revisa Xsense directamente."
+    elif any(a["tipo"] == "prueba" for a in avisos):
+        titulo, cuerpo = "🚨 Prueba de timbre", "Así sonará y vibrará el celular cuando haya una desviación."
+    else:
+        nombres = [a["titulo"].split(" — ", 1)[-1] for a in camaras]
+        n = len(camaras)
+        titulo = f"🚨 {n} cámara{'s' if n != 1 else ''} fuera de rango" + (f" ({len(nuevas)} nueva{'s' if len(nuevas) != 1 else ''})" if nuevas and len(nuevas) < n else "")
+        cuerpo = " · ".join(nombres[:4]) + (f" y {n - 4} más" if n > 4 else "")
+    return dict(tipo="timbre", titulo=titulo, cuerpo=cuerpo, url=URL_APP, imagen="", tag="timbre")
+
+
+def enviar_con_timbre(db, avisos: list):
+    """Si algo requiere atención: alertas por cámara en silencio + resumen que suena TIMBRES veces."""
+    if not any(a["tipo"] in TIPOS_QUE_SUENAN for a in avisos):
+        enviar(db, avisos)                      # p. ej. solo "volvió a la normalidad": suena una vez
+        return
+    enviar(db, [{**a, "silencioso": "1"} for a in avisos])
+    timbre = resumen_timbre(avisos)
+    for i in range(TIMBRES):
+        time.sleep(SEGUNDOS_ENTRE_TIMBRES if i else 2)
+        enviar(db, [{**timbre, "repeticion": str(i + 1)}])
+
+
 # ---------------------------------------------------------------------------
 # Modos de ejecución
 # ---------------------------------------------------------------------------
@@ -258,7 +293,7 @@ def procesar_estado(db):
 
     for a in avisos:
         print(f"-> {a['titulo']}")
-    enviar(db, avisos)
+    enviar_con_timbre(db, avisos)
     guardar_control(db, {"camaras": alertas, "actualizado_ms": ahora_ms})
 
 
@@ -268,7 +303,7 @@ def procesar_error(db):
     desde = control.get("error_desde_ms") or ahora_ms
     ultimo = control.get("error_ultimo_aviso_ms", 0)
     if ahora_ms - ultimo >= AVISO_ERROR_MIN * 60000 - 90000:
-        enviar(db, [dict(tipo="error", titulo="⚠️ El monitor no pudo revisar Xsense",
+        enviar_con_timbre(db, [dict(tipo="error", titulo="⚠️ El monitor no pudo revisar Xsense",
                          cuerpo="Las temperaturas no se están actualizando. Revisa Xsense directamente "
                                 "mientras se resuelve.", url=URL_APP, imagen="", tag="monitor")])
         ultimo = ahora_ms
@@ -278,7 +313,7 @@ def procesar_error(db):
 
 
 def procesar_prueba(db):
-    enviar(db, [dict(tipo="prueba", titulo="🔔 Prueba de Alerta Xsense",
+    enviar_con_timbre(db, [dict(tipo="prueba", titulo="🔔 Prueba de Alerta Xsense",
                      cuerpo="Si ves este mensaje, las notificaciones funcionan en este celular.",
                      url=URL_APP, imagen="", tag="prueba")])
 

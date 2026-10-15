@@ -783,12 +783,13 @@
     // Con la app abierta: aviso dentro de la app + notificación del sistema
     onMessage(messaging, async (payload) => {
       const d = payload.data || {};
-      avisar(d.titulo || "Alerta Xsense", d.cuerpo || "", d.url || null);
+      if (d.tipo !== "timbre" || d.repeticion === "1") avisar(d.titulo || "Alerta Xsense", d.cuerpo || "", d.url || null);
       window.dispatchEvent(new Event("alerta-recibida"));
       const reg = registro || await navigator.serviceWorker.ready;
       reg.showNotification(d.titulo || "Alerta Xsense", {
         body: d.cuerpo || "", icon: "icons/icon-192.png", badge: "icons/badge-96.png",
-        image: d.imagen || undefined, tag: d.tag || undefined, renotify: true, data: { url: d.url },
+        image: d.imagen || undefined, tag: d.tag || undefined, renotify: d.silencioso !== "1",
+        silent: d.silencioso === "1", vibrate: [700, 200, 700, 200, 700], data: { url: d.url },
       });
     });
 

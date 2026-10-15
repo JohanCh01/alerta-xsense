@@ -2,7 +2,7 @@
 //  - Permite instalar la app y abrirla sin señal (muestra los últimos datos descargados).
 //  - Recibe las notificaciones push de Firebase aunque la app esté cerrada,
 //    y al tocarlas abre la app directo en la cámara de la alerta.
-const CACHE = "alerta-xsense-v2";
+const CACHE = "alerta-xsense-v3";
 const BASE = ["./", "index.html", "manifest.webmanifest", "icons/icon.svg",
               "icons/icon-192.png", "icons/icon-512.png", "icons/badge-96.png"];
 
@@ -32,9 +32,10 @@ function mostrarNotificacion(d) {
     badge: base + "icons/badge-96.png",
     image: d.imagen || undefined,
     tag: d.tag || undefined,           // una notificación por cámara: la nueva reemplaza a la anterior
-    renotify: true,                    // ...pero igual vuelve a sonar
-    requireInteraction: d.tipo === "desviacion" || d.tipo === "error",
-    vibrate: [200, 100, 200],
+    renotify: d.silencioso !== "1",    // ...y vuelve a sonar (el "timbre" suena 3 veces)
+    silent: d.silencioso === "1",      // alertas por cámara: en la bandeja, sin sonar
+    requireInteraction: ["desviacion", "error", "timbre"].includes(d.tipo),
+    vibrate: [700, 200, 700, 200, 700],
     timestamp: Number(d.ts) || Date.now(),
     data: { url: d.url || base },
   });
