@@ -664,7 +664,7 @@
 <script type="module">
   // ---------------------------------------------------------------- notificaciones push
   import { initializeApp } from "./vendor/firebase-12.19.0/firebase-app.js";
-  import { getMessaging, getToken, onMessage, isSupported } from "./vendor/firebase-12.19.0/firebase-messaging.js";
+  import { getMessaging, getToken, deleteToken, onMessage, isSupported } from "./vendor/firebase-12.19.0/firebase-messaging.js";
 
   const CONFIG = {
     apiKey: "AIzaSyD3ydrhq5Togj7kYv66MC224kUJWKalUko",
@@ -682,18 +682,21 @@
   const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const instalada = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   let messaging = null, registro = null, ocupado = false;
+  const CLAVE_OFF = "alerta-xsense:alertas-desactivadas";
+  const desactivadas = () => { try { return localStorage.getItem(CLAVE_OFF) === "1"; } catch { return false; } };
+  const marcarDesactivadas = (si) => { try { si ? localStorage.setItem(CLAVE_OFF, "1") : localStorage.removeItem(CLAVE_OFF); } catch {} };
 
   function modo(m) {
     btn.hidden = false;
     btn.classList.toggle("bloqueado", m === "bloqueado" || m === "no-soportado");
     btn.setAttribute("aria-pressed", String(m === "activo"));
     btn.title = {
-      activo: "Alertas activadas en este celular",
+      activo: "Alertas activadas · toca para desactivarlas",
       inactivo: "Activar alertas en este celular",
       bloqueado: "Las notificaciones están bloqueadas para esta app",
       "no-soportado": "Este navegador no puede recibir alertas",
     }[m];
-    invita.innerHTML = m === "inactivo"
+    invita.innerHTML = m === "inactivo" && !desactivadas()
       ? `<div class="invita"><p><b>Recibe las alertas en este celular</b>Te avisaremos apenas una cámara salga de su rango, aunque la app esté cerrada.</p><button class="btn-prim" id="btn-activar">Activar</button></div>`
       : "";
     const b = document.getElementById("btn-activar");
@@ -729,6 +732,28 @@
     await guardarToken(token);
   }
 
+  // Desactiva las alertas SOLO en este celular: borra su identificador de notificaciones.
+  // El monitor detecta en el siguiente envío que ya no existe y lo quita de la lista.
+  async function desactivar() {
+    if (ocupado) return;
+    if (!confirm("¿Desactivar las alertas en este celular?\n\nDejarás de recibir notificaciones de temperatura. Podrás volver a activarlas con la campana 🔔.")) return;
+    ocupado = true;
+    try {
+      registro = registro || await navigator.serviceWorker.ready;
+      await deleteToken(messaging);
+      const pendientes = await registro.getNotifications();
+      pendientes.forEach((n) => n.close());
+      marcarDesactivadas(true);
+      modo("inactivo");
+      avisar("Alertas desactivadas", "Este celular ya no recibirá notificaciones. Toca la campana para volver a activarlas.");
+    } catch (e) {
+      console.error(e);
+      avisar("No se pudieron desactivar", "Revisa tu conexión a internet e inténtalo de nuevo.");
+    } finally {
+      ocupado = false;
+    }
+  }
+
   async function activar() {
     if (ocupado) return;
     if (!messaging) {
@@ -746,6 +771,7 @@
         return;
       }
       await registrar();
+      marcarDesactivadas(false);
       modo("activo");
       registro.showNotification("✅ Alertas activadas", {
         body: "Recibirás un aviso cuando una cámara de Packing Espárrago salga de su rango.",
@@ -778,7 +804,7 @@
 
   btn.addEventListener("click", () => {
     if (btn.getAttribute("aria-pressed") === "true") {
-      avisar("Alertas activadas", "Este celular ya recibe las alertas de temperatura.");
+      desactivar();
     } else if (btn.classList.contains("bloqueado") && Notification?.permission === "denied") {
       avisar("Notificaciones bloqueadas", "Actívalas en los ajustes del celular: Ajustes → Apps → Alerta Xsense → Notificaciones.");
     } else {
@@ -804,7 +830,9 @@
       });
     });
 
-    if (Notification.permission === "granted") {
+    if (Notification.permission === "granted" && desactivadas()) {
+      modo("inactivo");                               // el usuario las apagó: no se vuelve a registrar solo
+    } else if (Notification.permission === "granted") {
       modo("activo");
       registrar().catch((e) => console.warn("No se pudo renovar el registro:", e));  // mantiene vigente el registro
     } else {
