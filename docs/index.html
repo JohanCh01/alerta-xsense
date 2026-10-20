@@ -192,6 +192,7 @@
   .pill svg { width: 13px; height: 13px; }
   .pill.ALTO, .pill.BAJO { background: var(--bad-soft); color: var(--bad); }
   .pill.OK { background: var(--ok-soft); color: var(--ok); }
+  .srax { font-size: 10.5px; color: var(--ink-3); opacity: .75; letter-spacing: .04em; margin-left: 4px; }
   .pill.LIMITE { background: var(--warn-soft); color: var(--warn); }
   .card.st-LIMITE::before { background: var(--warn); }
   .pill.SIN_RANGO, .pill.SIN_DATO { background: var(--idle-soft); color: var(--idle); }
@@ -446,7 +447,7 @@
     const notas = [];
     if (esDesvio(c) && c.fuera_desde_ms) {
       const min = Math.max(0, Math.round((estado.generado_ms - c.fuera_desde_ms) / 60000));
-      notas.push(`Fuera de rango hace ${duracion(min)}${min < 60 ? " · alerta al cumplir 1 h" : ""}`);
+      notas.push(`Fuera de rango hace ${duracion(min)}`);
     }
     if (c.sensores.length > 1 && c.sensores_fuera > 0) notas.push(`${c.sensores_fuera} de ${c.sensores.length} sensores fuera de rango`);
     const nota = notas.length ? `<div class="nota">${notas.map(esc).join("<br>")}</div>` : "";
@@ -511,7 +512,7 @@
         <div class="big">${fmtT(c.promedio)}<small> °C</small></div>
         <div class="datos">
           <div>${pill(c)}</div>
-          <div>Rango permitido <b>${c.min != null ? `${fmtR(c.min)} – ${fmtR(c.max)} °C` : "no configurado"}</b>${c.min != null ? (c.regla_xsense ? ` · Tolerancia Xsense <b>±${fmtR(c.tolerancia || 0)} °C</b>` : " · <span style=\"color:var(--warn)\">sin regla de alerta en Xsense</span>") : ""}</div>
+          <div>Rango permitido <b>${c.min != null ? `${fmtR(c.min)} – ${fmtR(c.max)} °C` : "no configurado"}</b>${c.min != null ? (c.regla_xsense ? ` · Tolerancia Xsense <b>±${fmtR(c.tolerancia || 0)} °C</b>` : " <span class=\"srax\" title=\"Sin regla de alerta en Xsense\">SRAX</span>") : ""}</div>
           <div>Última lectura <b>${c.ultima_lectura_ms ? fechaHora(c.ultima_lectura_ms) : "–"}</b>${c.humedad != null ? ` · Humedad <b>${Math.round(c.humedad)} %</b>` : ""}</div>
         </div>
       </div>
