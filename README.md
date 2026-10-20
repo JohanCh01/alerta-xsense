@@ -74,9 +74,9 @@ a los celulares que tocaron **Activar alertas** en la app:
 
 | Cuándo | Aviso |
 |---|---|
-| Una cámara sale de su rango o deja de reportar | ⚠️ Desviación (con el gráfico) |
-| Sigue fuera de rango | ⏱ Recordatorio cada 30 min |
-| Vuelve a su rango | ✅ Volvió a la normalidad |
+| Una cámara lleva **1 hora seguida** fuera de su rango (una sola vez, sin recordatorios) | ⚠️ Desviación de más de 1 h (con el gráfico) |
+| Una cámara deja de reportar | 📡 Sin lecturas |
+| Vuelve a su rango (solo si se había alertado) | ✅ Volvió a la normalidad |
 | El monitor no pudo revisar Xsense | ⚠️ Aviso (máximo 1 por hora) |
 
 Al tocar la notificación se abre la app directo en la cámara.

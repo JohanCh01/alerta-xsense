@@ -45,6 +45,11 @@ TIMBRES = 3
 SEGUNDOS_ENTRE_TIMBRES = 4      # Android ignora sonidos de una misma app demasiado seguidos
 TIPOS_QUE_SUENAN = ("desviacion", "recordatorio", "error", "prueba")
 
+# Una cámara solo genera alerta cuando lleva este tiempo fuera de rango SIN interrupción.
+# Se avisa UNA sola vez (sin recordatorios); si vuelve a su rango y luego se desvía de nuevo,
+# el conteo empieza otra vez.
+MINUTOS_PARA_ALERTAR = 60
+
 RECORDATORIO_MIN = 30          # cada cuánto se repite el aviso si sigue fuera de rango
 AVISO_ERROR_MIN = 60           # como máximo un aviso de "monitor caído" por hora
 ESTADOS_ALERTA = ("ALTO", "BAJO", "SIN_LECTURAS")
@@ -91,13 +96,13 @@ def _sensores_fuera(c):
     return f" · {n} de {total} sensores fuera" if total > 1 and n else ""
 
 
-def mensaje_nueva(c):
+def mensaje_nueva(c, lleva_ms=0):
     if c["estado"] == "SIN_LECTURAS":
         return ("📡 Sin lecturas — " + c["nombre"],
                 f"Los sensores no reportan desde las {_hora(c)}. Revisa el equipo o la conexión.")
-    return ("⚠️ Desviación — " + c["nombre"],
+    return ("⚠️ Desviación de más de 1 h — " + c["nombre"],
             f"{_t(c['promedio'])} °C · rango {_r(c['min'])}–{_r(c['max'])} °C · lectura {_hora(c)}\n"
-            f"{_detalle_desvio(c)}{_sensores_fuera(c)}")
+            f"Lleva {_duracion(lleva_ms)} fuera de rango · {_detalle_desvio(c)}{_sensores_fuera(c)}")
 
 
 def mensaje_recordatorio(c, fuera_ms):
@@ -124,39 +129,36 @@ def mensaje_normal(c, fuera_ms):
 # ---------------------------------------------------------------------------
 def decidir_avisos(estado: dict, previo: dict, ahora_ms: int):
     """Devuelve (avisos, nuevo_estado_de_alertas).
-    previo / nuevo: {id_camara: {"estado", "desde_ms", "ultimo_aviso_ms"}}"""
+    previo / nuevo: {id_camara: {"estado", "desde_ms", "notificado"}}"""
     avisos, nuevo = [], {}
-    base_img = URL_APP
     version = estado.get("generado_ms", ahora_ms)
+    espera_ms = MINUTOS_PARA_ALERTAR * 60000
 
     for c in estado.get("camaras", []):
         cid = c["id"]
         antes = previo.get(cid)
+        # registros guardados con la regla anterior (avisos inmediatos): ya fueron avisados
+        notificado = bool(antes) and antes.get("notificado", "ultimo_aviso_ms" in antes)
         url = f"{URL_APP}#c/{cid}"
-        imagen = f"{base_img}{c['grafico']}?v={version}" if c.get("grafico") else ""
+        imagen = f"{URL_APP}{c['grafico']}?v={version}" if c.get("grafico") else ""
 
         if c["estado"] in ESTADOS_ALERTA:
-            if not antes:
-                titulo, cuerpo = mensaje_nueva(c)
-                nuevo[cid] = {"estado": c["estado"], "desde_ms": ahora_ms, "ultimo_aviso_ms": ahora_ms}
+            # desde cuándo está fuera: lo que dice el historial de Xsense, o lo que ya teníamos anotado
+            desde = c.get("fuera_desde_ms") or (antes or {}).get("desde_ms") or ahora_ms
+            if antes and antes.get("desde_ms"):
+                desde = min(desde, antes["desde_ms"])
+            registro = {"estado": c["estado"], "desde_ms": desde, "notificado": notificado}
+            lleva_ms = ahora_ms - desde
+            if not notificado and (c["estado"] == "SIN_LECTURAS" or lleva_ms >= espera_ms - 90000):
+                titulo, cuerpo = mensaje_nueva(c, lleva_ms)
+                registro["notificado"] = True
                 avisos.append(dict(tipo="desviacion", titulo=titulo, cuerpo=cuerpo, url=url, imagen=imagen, tag=cid))
-            elif antes["estado"] != c["estado"]:
-                # p. ej. pasó de ALTO a SIN_LECTURAS: se avisa como algo nuevo, conservando desde cuándo
-                titulo, cuerpo = mensaje_nueva(c)
-                nuevo[cid] = {"estado": c["estado"], "desde_ms": antes["desde_ms"], "ultimo_aviso_ms": ahora_ms}
-                avisos.append(dict(tipo="desviacion", titulo=titulo, cuerpo=cuerpo, url=url, imagen=imagen, tag=cid))
-            elif ahora_ms - antes["ultimo_aviso_ms"] >= RECORDATORIO_MIN * 60000 - 90000:  # 1.5 min de margen
-                titulo, cuerpo = mensaje_recordatorio(c, ahora_ms - antes["desde_ms"])
-                nuevo[cid] = {**antes, "ultimo_aviso_ms": ahora_ms}
-                avisos.append(dict(tipo="recordatorio", titulo=titulo, cuerpo=cuerpo, url=url, imagen=imagen, tag=cid))
-            else:
-                nuevo[cid] = antes
-        elif antes:
+            nuevo[cid] = registro
+        elif antes and notificado:
             titulo, cuerpo = mensaje_normal(c, ahora_ms - antes["desde_ms"])
             avisos.append(dict(tipo="normal", titulo=titulo, cuerpo=cuerpo, url=url, imagen="", tag=cid))
-            # al no copiarlo a "nuevo", la cámara queda libre para una próxima alerta
+        # si volvió a su rango antes de cumplir la hora, se olvida sin avisar
 
-    # Cámaras que ya no aparecen en Xsense: se olvidan sin avisar
     return avisos, nuevo
 
 

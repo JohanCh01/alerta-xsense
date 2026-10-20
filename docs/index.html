@@ -333,6 +333,7 @@
   const fmtR = (v) => (v == null ? "–" : String(+v));
   const hora = (ms) => new Date(ms).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" });
   const fechaHora = (ms) => new Date(ms).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" });
+  const duracion = (min) => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
   const esDesvio = (c) => c.estado === "ALTO" || c.estado === "BAJO";
   const numCamara = (n) => (n.match(/^(\d+)\.\s*/) || [])[1] || "";
   const sinNum = (n) => n.replace(/^\d+\.\s*/, "");
@@ -442,8 +443,13 @@
 
   function tarjeta(c) {
     const rango = c.min != null ? `Rango ${fmtR(c.min)} – ${fmtR(c.max)} °C${c.tolerancia ? ` · tol. ±${fmtR(c.tolerancia)}` : ""}` : "Sin rango configurado";
-    const nota = c.sensores.length > 1 && c.sensores_fuera > 0
-      ? `<div class="nota">${c.sensores_fuera} de ${c.sensores.length} sensores fuera de rango</div>` : "";
+    const notas = [];
+    if (esDesvio(c) && c.fuera_desde_ms) {
+      const min = Math.max(0, Math.round((estado.generado_ms - c.fuera_desde_ms) / 60000));
+      notas.push(`Fuera de rango hace ${duracion(min)}${min < 60 ? " · alerta al cumplir 1 h" : ""}`);
+    }
+    if (c.sensores.length > 1 && c.sensores_fuera > 0) notas.push(`${c.sensores_fuera} de ${c.sensores.length} sensores fuera de rango`);
+    const nota = notas.length ? `<div class="nota">${notas.map(esc).join("<br>")}</div>` : "";
     return `<button class="card st-${c.estado}" data-id="${esc(c.id)}" aria-label="${esc(c.nombre)}: ${fmtT(c.promedio)} grados, ${esc(etiquetaEstado(c))}">
       <div class="nombre"><span class="num-cam">${esc(numCamara(c.nombre))}</span><span>${esc(sinNum(c.nombre))}</span></div>
       <div>

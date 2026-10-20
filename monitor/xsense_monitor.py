@@ -359,6 +359,22 @@ def evaluar(item: dict, detalle: dict) -> dict:
     }
 
 
+def fuera_desde(camara: dict):
+    """Momento (ms) desde el que el promedio está fuera de rango SIN interrupción,
+    según el historial de Xsense. Si todo el historial (24 h) está fuera, devuelve su inicio."""
+    serie, tol = camara.get("serie") or [], camara.get("tolerancia") or 0
+    t_min, t_max = camara.get("min"), camara.get("max")
+    if not serie or t_min is None or t_max is None:
+        return camara.get("ultima_lectura_ms")
+    desde = None
+    for ms, valor in reversed(serie):
+        if _fuera(valor, t_min, t_max, tol):
+            desde = ms
+        else:
+            break
+    return desde or camara.get("ultima_lectura_ms")
+
+
 # ---------------------------------------------------------------------------
 # Gráfico PNG (para la notificación)
 # ---------------------------------------------------------------------------
@@ -487,6 +503,8 @@ def revisar(sesion) -> dict:
                     obtener_lecturas(sesion, item["id"], promedio=False))
         except Exception as e:
             print(f"   (no se pudo leer el historial de {res['nombre']}: {e})")
+
+        res["fuera_desde_ms"] = fuera_desde(res) if res["estado"] in ("ALTO", "BAJO") else None
 
         if res["estado"] in ("ALTO", "BAJO") and res["serie"]:
             try:
