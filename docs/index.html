@@ -129,6 +129,22 @@
   html.embed .pill { font-size: 11.5px; padding: 2px 8px 2px 6px; }
   html.embed .card .spark { height: 30px; margin-top: 4px; }
   html.embed .pie { margin-top: 12px; }
+  /* La cuadrícula ocupa todo el alto disponible: las tarjetas crecen y el mini-gráfico se estira */
+  html.embed body { height: 100vh; display: flex; flex-direction: column; padding: 0; }
+  html.embed header.top { flex: none; }
+  html.embed main.wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 10px; width: 100%; }
+  html.embed .resumen { flex: none; }
+  html.embed .grid { flex: 1 1 auto; min-height: 0; grid-auto-rows: minmax(150px, 1fr); }
+  html.embed .card { grid-template-rows: auto auto minmax(36px, 1fr); }
+  html.embed .card:has(.nota) { grid-template-rows: auto auto auto minmax(36px, 1fr); }
+  html.embed .card .spark { height: auto; min-height: 36px; }
+  html.embed .card .nombre { font-size: 14px; }
+  html.embed .card .temp { font-size: 30px; }
+  html.embed .card .temp small { font-size: 15px; }
+  html.embed .card .rango, html.embed .card .nota { font-size: 13px; }
+  html.embed .card .hora { font-size: 12px; }
+  html.embed .pill { font-size: 12.5px; padding: 3px 9px 3px 7px; }
+  html.embed main > .pie { display: none; }
   @media (max-width: 1150px) { html.embed .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 860px) { html.embed .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 560px) { html.embed .grid { grid-template-columns: 1fr; } }
