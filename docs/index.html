@@ -2,6 +2,10 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<script>
+  // ?embed=1 → vista dentro de otra página (p. ej. Flujo de cosecha): solo consulta, sin alertas
+  if (/[?&]embed=1\b/.test(location.search)) document.documentElement.classList.add("embed");
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Alerta Xsense</title>
 <meta name="description" content="Monitoreo de temperaturas de cámaras — Packing Espárrago">
@@ -104,6 +108,9 @@
   .logo svg { width: 20px; height: 20px; }
   .titles { flex: 1; min-width: 0; }
   .titles h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
+  html.embed .top-row, html.embed #invita-alertas { display: none !important; }
+  html.embed header.top { padding-top: 2px; }
+  html.embed .meta { margin-top: 6px; }
   .titles p { margin: 0; color: var(--ink-2); font-size: 13px; }
   .icon-btn {
     border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
@@ -663,7 +670,7 @@
   setInterval(() => { if (estado) renderMeta(); }, 30 * 1000);
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    if (!document.documentElement.classList.contains("embed")) navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 })();
 </script>
@@ -820,6 +827,7 @@
   });
 
   (async () => {
+    if (document.documentElement.classList.contains("embed")) return;   // dentro de otra página: sin alertas
     const soportado = "serviceWorker" in navigator && "Notification" in window && await isSupported().catch(() => false);
     if (!soportado) { modo("no-soportado"); return; }
     messaging = getMessaging(initializeApp(CONFIG));
