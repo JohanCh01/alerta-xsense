@@ -1,11 +1,11 @@
 # Revisa las temperaturas de Xsense y publica la app con los datos nuevos.
-# Corre solo cada 10 minutos (GitHub puede atrasarse algunos minutos),
+# Corre solo cada 15 minutos (GitHub puede atrasarse algunos minutos),
 # cuando se sube un cambio a la app, o a mano desde la pestaña "Actions".
 name: Monitor Xsense
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       prueba:

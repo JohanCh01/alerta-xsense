@@ -25,7 +25,7 @@ Credenciales (nunca se escriben en el código):
 
 Uso (desde la raíz del repositorio):
     python monitor/xsense_monitor.py            -> una sola revisión
-    python monitor/xsense_monitor.py --bucle    -> revisa cada 10 min (Ctrl+C para detener)
+    python monitor/xsense_monitor.py --bucle    -> revisa cada 15 min (Ctrl+C para detener)
     python monitor/xsense_monitor.py --ver      -> muestra el navegador (depurar login)
 """
 
@@ -67,7 +67,7 @@ NOMBRE_NODO = "Packing Espárrago"
 ZONA_LIMA = timezone(timedelta(hours=-5))
 HEADERS = {"Accept": "application/json"}  # sin esto Xsense responde en XML
 
-INTERVALO_MINUTOS = 10      # cada cuánto revisa (en --bucle y lo que muestra la app como "Próxima")
+INTERVALO_MINUTOS = 15      # cada cuánto revisa (en --bucle y lo que muestra la app como "Próxima")
 MINUTOS_SIN_LECTURA = 30    # sin lecturas en este tiempo -> "SIN LECTURAS" (reportan cada ~8 min)
 HORAS_HISTORIAL = 24        # horas de historial para los gráficos
 
