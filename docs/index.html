@@ -368,6 +368,7 @@
   const COLORES_SENSOR = ["--s1", "--s2", "--s3"];
 
   let estado = null;
+  let sinConexion = false;
   let filtro = "todas";
   let horasDetalle = 24;
   let idDetalle = null;
@@ -415,12 +416,15 @@
       const r = await fetch(`${URL_DATOS}?t=${Date.now()}`, { cache: "no-store" });
       if (!r.ok) throw new Error(r.status === 404 ? "sin-datos" : `HTTP ${r.status}`);
       const nuevo = await r.json();
-      const cambio = !estado || nuevo.generado_ms !== estado.generado_ms;
+      const antes = sinConexion;
+      sinConexion = r.headers.get("X-Desde-Cache") === "1";   // la red falló: es la copia guardada
+      const cambio = !estado || nuevo.generado_ms !== estado.generado_ms || antes !== sinConexion;
       estado = nuevo;
       if (cambio || manual) render();
     } catch (e) {
+      sinConexion = true;
       if (!estado) renderVacio(e.message === "sin-datos");
-      else renderMeta(true);
+      else renderMeta();
     } finally {
       setTimeout(() => btn.classList.remove("girando"), 300);
     }
@@ -435,7 +439,7 @@
       <p>${sinDatos ? "Aparecerán aquí después de la primera revisión automática del monitor." : "Revisa tu conexión a internet e inténtalo de nuevo."}</p></div>`;
   }
 
-  function renderMeta(falloRed = false) {
+  function renderMeta() {
     const ahora = Date.now();
     const min = Math.round((ahora - estado.generado_ms) / 60000);
     const proxima = estado.generado_ms + estado.intervalo_minutos * 60000;
@@ -447,10 +451,10 @@
     let aviso = "";
     if (estado._muestra) {
       aviso = "Datos de muestra para revisar el diseño: aún no son lecturas en vivo.";
+    } else if (sinConexion) {
+      aviso = `Sin conexión a internet: se muestran los datos guardados de las ${hora(estado.generado_ms)}. Revisa tu señal o Wi-Fi y toca ↻.`;
     } else if (min > MIN_DESACTUALIZADO) {
       aviso = `No hay datos nuevos desde las ${hora(estado.generado_ms)}. El monitor automático podría estar detenido; revisa Xsense directamente.`;
-    } else if (falloRed) {
-      aviso = "Sin conexión: mostrando los últimos datos descargados.";
     }
     $("#aviso").innerHTML = aviso ? `<div class="aviso">${ICONO_AVISO}<span>${esc(aviso)}</span></div>` : "";
   }

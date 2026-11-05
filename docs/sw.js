@@ -2,7 +2,7 @@
 //  - Permite instalar la app y abrirla sin señal (muestra los últimos datos descargados).
 //  - Recibe las notificaciones push de Firebase aunque la app esté cerrada,
 //    y al tocarlas abre la app directo en la cámara de la alerta.
-const CACHE = "alerta-xsense-v3";
+const CACHE = "alerta-xsense-v4";
 const BASE = ["./", "index.html", "manifest.webmanifest", "icons/icon.svg",
               "icons/icon-192.png", "icons/icon-512.png", "icons/badge-96.png"];
 
@@ -69,6 +69,21 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// Si la red no responde en ese tiempo, se usa la copia guardada
+function conLimite(promesa, ms) {
+  return new Promise((ok, mal) => {
+    const t = setTimeout(() => mal(new Error("sin respuesta")), ms);
+    promesa.then((r) => { clearTimeout(t); ok(r); }, (e) => { clearTimeout(t); mal(e); });
+  });
+}
+
+// Avisa a la app que lo que recibe es la copia guardada (no hubo internet)
+async function marcarGuardada(r) {
+  const h = new Headers(r.headers);
+  h.set("X-Desde-Cache", "1");
+  return new Response(await r.blob(), { status: r.status, statusText: r.statusText, headers: h });
+}
+
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
@@ -77,9 +92,9 @@ self.addEventListener("fetch", (e) => {
   if (url.pathname.includes("/data/") || url.pathname.includes("/graficos/")) {
     const clave = url.origin + url.pathname;
     e.respondWith(
-      fetch(e.request)
+      conLimite(fetch(e.request), 10000)
         .then((r) => { const copia = r.clone(); caches.open(CACHE).then((c) => c.put(clave, copia)); return r; })
-        .catch(() => caches.match(clave))
+        .catch(() => caches.match(clave).then((r) => r && marcarGuardada(r)))
     );
     return;
   }
